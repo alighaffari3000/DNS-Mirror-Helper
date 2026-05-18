@@ -35,10 +35,17 @@ A bash utility for Ubuntu systems to manage DNS settings and apt mirror selectio
 
 ## Installation
 
+**Quick run (one-liner):**
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/alighaffari3000/DNS-Mirror-Helper/main/dns-mirror-helper.sh)
 ```
 
+**Manual download:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/alighaffari3000/DNS-Mirror-Helper/main/dns-mirror-helper.sh -o dns-mirror-helper.sh
+chmod +x dns-mirror-helper.sh
+sudo ./dns-mirror-helper.sh
+```
 
 ---
 
