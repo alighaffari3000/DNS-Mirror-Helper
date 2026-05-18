@@ -36,11 +36,9 @@ A bash utility for Ubuntu systems to manage DNS settings and apt mirror selectio
 ## Installation
 
 ```bash
-git clone https://github.com/youruser/dns-mirror-helper.git
-cd dns-mirror-helper
-chmod +x dns-mirror-helper.sh
-sudo ./dns-mirror-helper.sh
+bash <(curl -fsSL https://raw.githubusercontent.com/alighaffari3000/DNS-Mirror-Helper/main/dns-mirror-helper.sh)
 ```
+
 
 ---
 
