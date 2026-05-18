@@ -275,11 +275,11 @@ dns_check_mode() {
 }
 
 ########################################
-# DNS: FREE mode
+# DNS: International mode
 ########################################
 
 switch_free() {
-  echo ">> Switching to FREE mode (DoH via dnscrypt-proxy)..."
+  echo ">> Switching to International mode (DoH via dnscrypt-proxy)..."
   ensure_dnscrypt_installed || return
   systemctl start dnscrypt-proxy >/dev/null 2>&1 || true
   resolved_use_dnscrypt
@@ -350,7 +350,7 @@ dns_auto_select() {
 
   if [ "$ok" -eq 1 ]; then
     echo ">> International connectivity detected (DNS + HTTPS OK)."
-    echo ">> Staying in FREE mode."
+    echo ">> Staying in International mode."
   else
     echo ">> International connectivity seems DOWN after retries. Falling back to MELLI mode."
     switch_melli
@@ -506,7 +506,7 @@ dns_menu() {
     dns_show_status
     echo
     echo "DNS Manager — Choose an option:"
-    echo "  1) Switch to FREE mode (DoH)"
+    echo "  1) Switch to International mode (DoH)"
     echo "  2) Switch to MELLI mode (Auto DNS select)"
     echo "  3) Auto-select best mode"
     echo "  4) Manual DNS entry"
