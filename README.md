@@ -1,7 +1,8 @@
 # dns-mirror-helper
 
-A bash utility for Ubuntu systems to manage DNS settings and apt mirror selection from a single interactive menu.
+🇮🇷  [توضیحات فارسی](README_FA.md)
 
+A bash utility for Ubuntu systems to manage DNS settings and apt mirror selection from a single interactive menu.
 ---
 
 ## Features
