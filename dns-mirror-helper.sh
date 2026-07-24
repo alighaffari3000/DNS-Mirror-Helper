@@ -1197,6 +1197,36 @@ select_from_results() {
 }
 
 ########################################
+# Mirror: International connectivity
+########################################
+
+# Quick probe of international reachability, using well-known global Ubuntu
+# mirror endpoints. Returns 0 if any answers, 1 otherwise. Kept short (a few
+# seconds worst case) so it adds negligible delay when the link is healthy.
+international_is_up() {
+  local hosts=(
+    "https://archive.ubuntu.com/ubuntu/dists/${CODENAME}/InRelease"
+    "https://mirrors.tuna.tsinghua.edu.cn/ubuntu/dists/${CODENAME}/InRelease"
+  )
+  local h code
+  for h in "${hosts[@]}"; do
+    code=$(curl -4 --ipv4 -A "$UA" -sI -L --connect-timeout 3 --max-time 4 \
+      -o /dev/null -w "%{http_code}" "$h" 2>/dev/null || echo "000")
+    [[ "$code" == "200" ]] && return 0
+  done
+  return 1
+}
+
+# Appends the non-commented Iran mirrors to SELECTED_POOL (caller-scoped).
+add_ir_mirrors() {
+  local m
+  for m in "${IR_MIRRORS[@]}"; do
+    [[ "$m" == \#* || -z "$m" ]] && continue
+    SELECTED_POOL+=("$m")
+  done
+}
+
+########################################
 # Mirror: Source picker submenu
 ########################################
 
@@ -1208,21 +1238,34 @@ mirror_pick_source() {
 
   case "$src_choice" in
     1)
-      # Filter out commented entries
-      for m in "${IR_MIRRORS[@]}"; do
-        [[ "$m" == \#* || -z "$m" ]] && continue
-        SELECTED_POOL+=("$m")
-      done
+      add_ir_mirrors
       ;;
     2)
-      SELECTED_POOL=("${GLOBAL_MIRRORS[@]}")
+      echo -n "Checking international connectivity... "
+      if international_is_up; then
+        echo -e "${GREEN}up${NC}"
+        SELECTED_POOL=("${GLOBAL_MIRRORS[@]}")
+      else
+        echo -e "${RED}down${NC}"
+        echo -e "${YELLOW}International links appear blocked or cut.${NC}"
+        read -rp "Test Iran mirrors instead? (Y/n): " ans
+        if [[ "$ans" =~ ^[Nn]$ ]]; then
+          SELECTED_POOL=("${GLOBAL_MIRRORS[@]}")   # user insists on global
+        else
+          add_ir_mirrors
+        fi
+      fi
       ;;
     3)
-      for m in "${IR_MIRRORS[@]}"; do
-        [[ "$m" == \#* || -z "$m" ]] && continue
-        SELECTED_POOL+=("$m")
-      done
-      SELECTED_POOL+=("${GLOBAL_MIRRORS[@]}")
+      add_ir_mirrors
+      echo -n "Checking international connectivity... "
+      if international_is_up; then
+        echo -e "${GREEN}up${NC}"
+        SELECTED_POOL+=("${GLOBAL_MIRRORS[@]}")
+      else
+        echo -e "${RED}down — testing Iran mirrors only${NC}"
+        echo -e "${YELLOW}International links appear blocked or cut; skipping global mirrors.${NC}"
+      fi
       ;;
     0) return ;;
     *) echo "Invalid choice."; return ;;
