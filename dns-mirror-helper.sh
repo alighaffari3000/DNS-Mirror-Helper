@@ -3,11 +3,6 @@ set -euo pipefail
 
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# Resolve the script's own directory so bundled offline assets (binaries and
-# the DNSCrypt resolver list) can be found regardless of the caller's cwd.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-OFFLINE_DIR="$SCRIPT_DIR/offline"
-
 ########################################
 # Colors
 ########################################
@@ -115,27 +110,6 @@ ignore_system_dns = true
 EOF
 
   echo -e "${GREEN}>> Config written to $DNSCRYPT_CONFIG${NC}"
-
-  seed_resolver_cache
-}
-
-# Seed dnscrypt-proxy's resolver cache from the bundled offline list so DoH
-# mode can start even when download.dnscrypt.info is unreachable (e.g. during
-# an Internet blackout). We only seed when no live cache exists, so a fresher
-# copy that dnscrypt-proxy already downloaded is never clobbered.
-seed_resolver_cache() {
-  local cache_dir="/var/cache/dnscrypt-proxy"
-  local src_md="$OFFLINE_DIR/public-resolvers.md"
-  local src_sig="$OFFLINE_DIR/public-resolvers.md.minisig"
-
-  [[ -f "$src_md" ]] || return 0
-  mkdir -p "$cache_dir"
-
-  if [[ ! -f "$cache_dir/public-resolvers.md" ]]; then
-    cp "$src_md" "$cache_dir/public-resolvers.md"
-    [[ -f "$src_sig" ]] && cp "$src_sig" "$cache_dir/public-resolvers.md.minisig"
-    echo -e "${GREEN}>> Seeded resolver cache from offline bundle (works without Internet).${NC}"
-  fi
 }
 
 install_via_apt() {
@@ -197,15 +171,6 @@ install_via_binary() {
   install -m 755 "$BIN_PATH" /usr/local/bin/dnscrypt-proxy
   rm -rf "$TMP_DIR"
 
-  write_dnscrypt_service
-  systemctl daemon-reload
-  echo -e "${GREEN}>> dnscrypt-proxy installed via binary.${NC}"
-  return 0
-}
-
-# Writes the systemd unit for a manually-installed dnscrypt-proxy binary.
-# Shared by the GitHub-download and offline-bundle install paths.
-write_dnscrypt_service() {
   cat > /etc/systemd/system/dnscrypt-proxy.service <<EOF
 [Unit]
 Description=DNSCrypt-proxy client
@@ -220,56 +185,9 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 EOF
-}
 
-# Installs dnscrypt-proxy from the bundled offline/ tarball. This is the path
-# that keeps FREE mode working during an Internet blackout, when GitHub is
-# unreachable. Returns 1 if no bundle exists for the current architecture.
-install_via_offline() {
-  echo ">> Trying offline bundled binary..."
-
-  local ARCH BIN_ARCH
-  ARCH=$(uname -m)
-  case "$ARCH" in
-    x86_64)    BIN_ARCH="x86_64" ;;
-    aarch64)   BIN_ARCH="arm64" ;;
-    armv7l)    BIN_ARCH="arm" ;;
-    i386|i686) BIN_ARCH="i386" ;;
-    *)
-      echo -e "${RED}>> Unsupported architecture: $ARCH${NC}"
-      return 1
-      ;;
-  esac
-
-  local tarball="$OFFLINE_DIR/dnscrypt-proxy-linux_${BIN_ARCH}.tar.gz"
-  if [[ ! -f "$tarball" ]]; then
-    echo -e "${YELLOW}>> No offline bundle for ${BIN_ARCH} (looked in $OFFLINE_DIR).${NC}"
-    echo -e "${YELLOW}>> Tip: run ./prepare-offline.sh while online to fetch it.${NC}"
-    return 1
-  fi
-
-  local TMP_DIR
-  TMP_DIR=$(mktemp -d)
-  if ! tar -xzf "$tarball" -C "$TMP_DIR" 2>/dev/null; then
-    echo -e "${RED}>> Failed to extract offline bundle.${NC}"
-    rm -rf "$TMP_DIR"
-    return 1
-  fi
-
-  local BIN_PATH
-  BIN_PATH=$(find "$TMP_DIR" -name "dnscrypt-proxy" -type f | head -1)
-  if [ -z "$BIN_PATH" ]; then
-    echo -e "${RED}>> Binary not found in offline bundle.${NC}"
-    rm -rf "$TMP_DIR"
-    return 1
-  fi
-
-  install -m 755 "$BIN_PATH" /usr/local/bin/dnscrypt-proxy
-  rm -rf "$TMP_DIR"
-
-  write_dnscrypt_service
   systemctl daemon-reload
-  echo -e "${GREEN}>> dnscrypt-proxy installed from offline bundle (${BIN_ARCH}).${NC}"
+  echo -e "${GREEN}>> dnscrypt-proxy installed via binary.${NC}"
   return 0
 }
 
@@ -282,18 +200,12 @@ ensure_dnscrypt_installed() {
     local installed=0
     install_via_apt && installed=1
 
-    # Prefer the offline bundle before the GitHub download: during a blackout
-    # GitHub is unreachable and would only hang until timeout.
-    if [ "$installed" -eq 0 ]; then
-      install_via_offline && installed=1
-    fi
-
     if [ "$installed" -eq 0 ]; then
       install_via_binary && installed=1
     fi
 
     if [ "$installed" -eq 0 ]; then
-      echo -e "${RED}>> Installation failed via apt, offline bundle, and binary download.${NC}"
+      echo -e "${RED}>> Installation failed via apt and binary.${NC}"
       echo -e "${YELLOW}>> Falling back to MELLI mode...${NC}"
       switch_melli
       return 1

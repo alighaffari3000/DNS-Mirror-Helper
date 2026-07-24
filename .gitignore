@@ -1,9 +1,0 @@
-# Offline bundle: commit ONLY the x86_64 binary + resolver list.
-# Binaries for other architectures (arm/arm64/…) are fetched locally by
-# prepare-offline.sh and intentionally kept out of the repo to avoid bloat.
-offline/*
-!offline/dnscrypt-proxy-linux_x86_64.tar.gz
-!offline/dnscrypt-proxy-linux_x86_64.tar.gz.minisig
-!offline/public-resolvers.md
-!offline/public-resolvers.md.minisig
-!offline/VERSION
