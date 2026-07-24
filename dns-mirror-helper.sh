@@ -564,7 +564,14 @@ IR_MIRRORS=(
   "https://mirror.atlantiscloud.ir/ubuntu"
   "https://mirror.digitalvps.ir/ubuntu"
   "https://iran.chabokan.net/ubuntu"
-  "https://en-mirror.ir/ubuntu"
+
+  "https://repo.iut.ac.ir/ubuntu"
+  "https://ir.archive.ubuntu.com/ubuntu"
+  "https://mirrors.hyperclouds.ir/ubuntu"
+
+  # میرورهای آفلاین (تست شده و در دسترس نیستند — نگه‌داشته شده برای مرجع)
+  # "https://ubuntu.pishgaman.net/ubuntu"   # گواهی SSL منقضی شده
+  # "https://en-mirror.ir/ubuntu"           # فقط Maven/Gradle سرو می‌کند، مسیر Ubuntu وجود ندارد (404)
 )
 
 GLOBAL_MIRRORS=(
@@ -576,6 +583,15 @@ GLOBAL_MIRRORS=(
   "https://gb.archive.ubuntu.com/ubuntu"
   "https://ca.archive.ubuntu.com/ubuntu"
   "https://fi.archive.ubuntu.com/ubuntu"
+
+  "https://mirrors.tuna.tsinghua.edu.cn/ubuntu"
+  "https://mirrors.ustc.edu.cn/ubuntu"
+  "https://mirrors.huaweicloud.com/ubuntu"
+  "https://mirror.yandex.ru/ubuntu"
+  "https://mirror.nyist.edu.cn/ubuntu"
+
+  # میرورهای آفلاین (تست شده و در دسترس نیستند — نگه‌داشته شده برای مرجع)
+  # "https://mirror.nju.edu.cn/ubuntu"   # ریدایرکت loop نامتناهی (302)
 )
 
 UA="Mozilla/5.0 (X11; Ubuntu; Linux x86_64)"
