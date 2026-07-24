@@ -610,16 +610,46 @@ check_skip() {
 # Mirror: Test helpers
 ########################################
 
-check_head() {
+# Single reachability probe: fetches InRelease headers once and exposes both
+# the HTTP status and Last-Modified via globals, avoiding a duplicate request.
+# Returns 0 if the mirror is reachable (2xx), 1 otherwise.
+#   PROBE_CODE          -> final HTTP status code
+#   PROBE_LAST_MODIFIED -> Last-Modified header value (may be empty)
+PROBE_CODE="000"
+PROBE_LAST_MODIFIED=""
+
+probe_mirror() {
   local base="$1"
   local url="$base/dists/$CODENAME/InRelease"
+  PROBE_CODE="000"
+  PROBE_LAST_MODIFIED=""
 
-  local code
-  code=$(curl -4 --ipv4 -A "$UA" -I -L \
+  # Fast HEAD: grab headers + final status in one round-trip.
+  local resp
+  resp=$(curl -4 --ipv4 -A "$UA" -sI -L \
     --connect-timeout 3 --max-time 5 \
-    -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")
+    -w $'\n%{http_code}' "$url" 2>/dev/null || echo "")
+  PROBE_CODE=$(tail -n1 <<< "$resp" | tr -d '[:space:]')
+  PROBE_CODE="${PROBE_CODE:-000}"
 
-  [[ "$code" == "200" ]]
+  # Some mirrors/CDNs reject HEAD (405/403) though GET works fine.
+  # Fall back to a tiny ranged GET before declaring the mirror offline.
+  if [[ "$PROBE_CODE" != "200" ]]; then
+    resp=$(curl -4 --ipv4 -A "$UA" -sL -D - -o /dev/null \
+      --range 0-0 --connect-timeout 3 --max-time 5 \
+      -w $'\n%{http_code}' "$url" 2>/dev/null || echo "")
+    PROBE_CODE=$(tail -n1 <<< "$resp" | tr -d '[:space:]')
+    PROBE_CODE="${PROBE_CODE:-000}"
+  fi
+
+  # HEAD -> 200, ranged GET -> 206; both mean reachable.
+  if [[ "$PROBE_CODE" != "200" && "$PROBE_CODE" != "206" ]]; then
+    return 1
+  fi
+
+  PROBE_LAST_MODIFIED=$(grep -i "^last-modified:" <<< "$resp" \
+    | tail -n1 | cut -d' ' -f2- | tr -d '\r' || true)
+  return 0
 }
 
 check_suite() {
@@ -658,23 +688,17 @@ validate_mirror() {
   return 1
 }
 
-is_mirror_syncing() {
-  local base="$1"
-  local inrelease_url="$base/dists/$CODENAME/InRelease"
+# Evaluates the Last-Modified captured by probe_mirror (no network call).
+# Returns 0 if InRelease was regenerated within the last 15 minutes, which
+# indicates the mirror is mid-sync and should be skipped.
+mirror_is_syncing() {
+  [[ -z "$PROBE_LAST_MODIFIED" ]] && return 1
 
-  local last_modified
-  last_modified=$(curl -4 --ipv4 -A "$UA" -sI --connect-timeout 5 \
-    "$inrelease_url" 2>/dev/null | grep -i "last-modified:" | cut -d' ' -f2-)
-
-  if [[ -n "$last_modified" ]]; then
-    local mod_epoch now_epoch diff
-    mod_epoch=$(date -d "$last_modified" +%s 2>/dev/null || echo "0")
-    now_epoch=$(date +%s)
-    diff=$((now_epoch - mod_epoch))
-    [[ $diff -lt 900 ]]
-  else
-    return 1
-  fi
+  local mod_epoch now_epoch diff
+  mod_epoch=$(date -d "$PROBE_LAST_MODIFIED" +%s 2>/dev/null || echo "0")
+  now_epoch=$(date +%s)
+  diff=$((now_epoch - mod_epoch))
+  [[ $diff -lt 900 ]]
 }
 
 ########################################
@@ -701,12 +725,12 @@ test_mirrors() {
 
     echo -n -e "[${TESTED}/${TOTAL}] Testing ${YELLOW}$BASE${NC} ... "
 
-    if ! check_head "$BASE"; then
+    if ! probe_mirror "$BASE"; then
       echo -e "${RED}offline${NC}"
       continue
     fi
 
-    if is_mirror_syncing "$BASE"; then
+    if mirror_is_syncing; then
       echo -e "${YELLOW}syncing (skipped)${NC}"
       continue
     fi
