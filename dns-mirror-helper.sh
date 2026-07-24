@@ -610,6 +610,18 @@ check_skip() {
 # Mirror: Test helpers
 ########################################
 
+check_head() {
+  local base="$1"
+  local url="$base/dists/$CODENAME/InRelease"
+
+  local code
+  code=$(curl -4 --ipv4 -A "$UA" -I -L \
+    --connect-timeout 3 --max-time 5 \
+    -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")
+
+  [[ "$code" == "200" ]]
+}
+
 check_suite() {
   local base="$1" suite="$2" retry="${3:-0}"
   local url="$base/dists/$suite/InRelease"
@@ -688,6 +700,11 @@ test_mirrors() {
     check_skip
 
     echo -n -e "[${TESTED}/${TOTAL}] Testing ${YELLOW}$BASE${NC} ... "
+
+    if ! check_head "$BASE"; then
+      echo -e "${RED}offline${NC}"
+      continue
+    fi
 
     if is_mirror_syncing "$BASE"; then
       echo -e "${YELLOW}syncing (skipped)${NC}"
