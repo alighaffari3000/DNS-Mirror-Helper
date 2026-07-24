@@ -1,0 +1,7 @@
+# Shell scripts must always use LF — they run on Linux.
+*.sh text eol=lf
+
+# Offline assets must stay byte-exact: the minisign signatures are computed
+# over the precise bytes, so any EOL/encoding conversion would break
+# verification. Treat everything under offline/ as binary (no conversion).
+offline/** -text
