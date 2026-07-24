@@ -63,6 +63,22 @@ IR_DNS_LIST=(
   "149.112.112.112"
 )
 
+# Domains used to validate resolvers and connectivity.
+#   Domestic domains stay reachable on the national network during an
+#   international blackout, so a resolver that answers these is "working"
+#   even when google.com is dark. This is the whole point of MELLI mode:
+#   don't reject a healthy domestic resolver just because the outside world
+#   is unreachable.
+IR_TEST_DOMAINS=(
+  "aparat.com"
+  "digikala.com"
+  "shaparak.ir"
+)
+INTL_TEST_DOMAINS=(
+  "google.com"
+  "github.com"
+)
+
 DNSCRYPT_CONFIG="/etc/dnscrypt-proxy/dnscrypt-proxy.toml"
 DNSCRYPT_CONFIG_DIR="/etc/dnscrypt-proxy"
 RESOLVED_CONF_DIR="/etc/systemd/resolved.conf.d"
@@ -290,12 +306,30 @@ switch_free() {
 # DNS: MELLI mode
 ########################################
 
+# Returns 0 if resolver $1 returns an A record for at least one of the
+# remaining domain arguments. Tolerant by design: a single successful
+# answer is enough to call the resolver alive.
+dns_resolves() {
+  local server="$1"; shift
+  local domain
+  for domain in "$@"; do
+    if dig @"$server" "$domain" +time=1 +tries=1 +short 2>/dev/null \
+       | grep -qE '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 select_best_dns() {
-  echo ">> Testing DNS servers..."
+  echo ">> Testing DNS servers (against domestic domains)..."
   WORKING_DNS=()
 
   for DNS in "${IR_DNS_LIST[@]}"; do
-    if dig @"$DNS" google.com +time=1 +short >/dev/null 2>&1; then
+    # Validate against domestic domains, not google.com: during an
+    # international outage a healthy Iran resolver still answers these,
+    # so MELLI keeps working when it matters most.
+    if dns_resolves "$DNS" "${IR_TEST_DOMAINS[@]}"; then
       echo -e "${GREEN}[OK]${NC} $DNS"
       WORKING_DNS+=("$DNS")
     else
@@ -414,18 +448,35 @@ test_cmd() {
 
 dns_run_tests() {
   echo ">> Running DNS & connectivity tests..."
-  local fails=0
+  local nat_fails=0 intl_fails=0
 
-  test_cmd "DNS resolve google.com"    nslookup google.com      || fails=$((fails+1))
-  test_cmd "DNS resolve github.com"    nslookup github.com      || fails=$((fails+1))
-  test_cmd "HTTP IP check (api.ipify.org)"  curl -fs https://api.ipify.org   || fails=$((fails+1))
-  test_cmd "HTTP IP check (icanhazip.com)"  curl -fs https://icanhazip.com   || fails=$((fails+1))
+  # National network — should stay up even during an international outage.
+  # If these pass while the international block below fails, you're in the
+  # classic "outside cut, inside working" scenario and MELLI mode is right.
+  echo -e "${BLUE}-- National network --${NC}"
+  test_cmd "DNS resolve aparat.com"          nslookup aparat.com   || nat_fails=$((nat_fails+1))
+  test_cmd "HTTPS reach www.aparat.com"      curl -fs -I --max-time 6 https://www.aparat.com \
+    || nat_fails=$((nat_fails+1))
 
   echo
-  if [ "$fails" -eq 0 ]; then
-    echo -e "${GREEN}All tests passed. Connectivity looks GOOD.${NC}"
+  echo -e "${BLUE}-- International --${NC}"
+  test_cmd "DNS resolve google.com"          nslookup google.com   || intl_fails=$((intl_fails+1))
+  test_cmd "HTTP IP check (api.ipify.org)"   curl -fs --max-time 6 https://api.ipify.org \
+    || intl_fails=$((intl_fails+1))
+
+  echo
+  if [[ "$nat_fails" -eq 0 && "$intl_fails" -eq 0 ]]; then
+    echo -e "${GREEN}All tests passed — national and international connectivity look GOOD.${NC}"
+  elif [[ "$nat_fails" -eq 0 && "$intl_fails" -gt 0 ]]; then
+    echo -e "${YELLOW}International appears DOWN, but the national network is UP.${NC}"
+    echo -e "${YELLOW}=> Use MELLI mode (DNS Manager → 2) and Iran mirrors.${NC}"
+  elif [[ "$nat_fails" -gt 0 && "$intl_fails" -eq 0 ]]; then
+    echo -e "${YELLOW}National tests failed but international works.${NC}"
+    echo -e "${YELLOW}=> Unusual; the domestic test domains may have changed, or your"
+    echo -e "   current resolver can't reach them.${NC}"
   else
-    echo -e "${RED}$fails test(s) failed. Connectivity has issues.${NC}"
+    echo -e "${RED}Both national and international tests failed.${NC}"
+    echo -e "${RED}=> Full outage, or DNS is misconfigured. Try Safe reset, then MELLI mode.${NC}"
   fi
 }
 

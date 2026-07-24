@@ -9,11 +9,11 @@ A bash utility for Ubuntu systems to manage DNS settings and apt mirror selectio
 
 ### DNS Manager
 - **FREE mode** — routes DNS through [dnscrypt-proxy](https://github.com/DNSCrypt/dnscrypt-proxy) over DoH (DNS over HTTPS), bypassing local DNS restrictions
-- **MELLI mode** — auto-tests a built-in list of DNS servers and applies the fastest working ones directly (no external dependencies — the right choice during an international outage)
+- **MELLI mode** — auto-tests a built-in list of DNS servers and applies the fastest working ones directly (no external dependencies — the right choice during an international outage). Resolvers are validated against **domestic domains**, so a healthy Iran DNS is never wrongly rejected just because the outside world is unreachable
 - **Auto mode** — tries FREE mode first; falls back to MELLI automatically if international connectivity is unavailable
 - **Manual DNS entry** — enter any custom DNS addresses (comma-separated); validates each IP before applying
 - **Safe reset** — restarts DNS services and flushes caches
-- **Connectivity tests** — checks DNS resolution and HTTPS reachability
+- **Connectivity tests** — checks DNS resolution and HTTPS reachability, split into **national** and **international** groups so an "outside cut, inside working" outage is diagnosed at a glance (and points you to MELLI mode when that's the case)
 
 ### Mirror Manager
 - Tests Iran and/or international Ubuntu mirrors for speed and latency
@@ -77,7 +77,9 @@ Run the script with sudo and navigate the interactive menu:
   0) Back
 ```
 
-**During an international outage**, DoH (FREE mode) can't reach its upstream resolvers, so use **MELLI mode** — it points `resolv.conf` at a built-in list of domestic DNS servers and needs no external downloads.
+**During an international outage**, DoH (FREE mode) can't reach its upstream resolvers, so use **MELLI mode** — it points `resolv.conf` at a built-in list of domestic DNS servers and needs no external downloads. MELLI validates each resolver against domestic domains (e.g. `aparat.com`), so it still finds working DNS even when nothing outside the country resolves.
+
+**Connectivity tests** report national and international reachability separately. If the national tests pass while the international ones fail, you're in an "outside cut, inside working" outage — switch to MELLI mode and Iran mirrors.
 
 **Manual DNS entry example:**
 ```
@@ -134,6 +136,10 @@ Press a number to override, press Enter to confirm auto-selection, or wait 10 se
 ### Adding or removing DNS servers (MELLI mode)
 
 Edit the `IR_DNS_LIST` array near the top of the script.
+
+### Changing the validation domains
+
+MELLI and the connectivity tests decide whether a resolver/link is "working" by resolving the domains in `IR_TEST_DOMAINS` (domestic) and `INTL_TEST_DOMAINS` (international), defined near the top of the script. If a domestic test domain ever stops being a good signal, swap it there.
 
 ### Adding or removing mirrors
 
