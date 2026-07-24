@@ -686,6 +686,12 @@ UA="Mozilla/5.0 (X11; Ubuntu; Linux x86_64)"
 MAX_RETRIES=2
 VALIDATION_RETRIES=3
 
+# Persistent state: remember the last mirror that passed apt update so we can
+# re-apply it instantly without a full scan — valuable during a blackout when
+# scanning the whole list is slow and full of timeouts.
+MIRROR_STATE_DIR="/var/lib/dns-mirror-helper"
+LAST_GOOD_FILE="$MIRROR_STATE_DIR/last-good"
+
 ########################################
 # Mirror: Non-blocking input helpers
 ########################################
@@ -915,6 +921,49 @@ test_mirrors() {
 }
 
 ########################################
+# Mirror: Last known-good cache
+########################################
+
+# Persist the mirror that just passed apt update. Best-effort: needs root, so
+# it uses sudo and never aborts the caller on failure.
+save_last_good() {
+  local mirror="$1"
+  [[ -z "$mirror" ]] && return 0
+  sudo mkdir -p "$MIRROR_STATE_DIR" >/dev/null 2>&1 || return 0
+  echo "$mirror" | sudo tee "$LAST_GOOD_FILE" >/dev/null 2>&1 || return 0
+  echo -e "${GREEN}>> Saved as last known-good mirror.${NC}"
+}
+
+# Fast path: try the last known-good mirror and, if it is reachable right now,
+# apply it directly — skipping the full scan. Returns 1 (so callers can fall
+# back to a scan) when there is no record or it is currently offline.
+use_last_good_mirror() {
+  if [[ ! -f "$LAST_GOOD_FILE" ]]; then
+    echo -e "${YELLOW}No last known-good mirror recorded yet.${NC}"
+    echo -e "It is saved automatically the first time you apply a mirror."
+    return 1
+  fi
+
+  local mirror
+  mirror=$(head -1 "$LAST_GOOD_FILE" 2>/dev/null | tr -d '[:space:]')
+  if [[ -z "$mirror" ]]; then
+    echo -e "${YELLOW}Last known-good record is empty.${NC}"
+    return 1
+  fi
+
+  echo -e "Last known-good mirror: ${GREEN}$mirror${NC}"
+  echo -n "Checking reachability... "
+  if probe_mirror "$mirror"; then
+    echo -e "${GREEN}online${NC}"
+    apply_mirror "$mirror"
+  else
+    echo -e "${RED}offline (HTTP ${PROBE_CODE})${NC}"
+    echo -e "${YELLOW}Unreachable right now — run a full scan instead (menu 1/2/3).${NC}"
+    return 1
+  fi
+}
+
+########################################
 # Mirror: Apply selected mirror
 ########################################
 
@@ -1003,6 +1052,7 @@ apply_mirror() {
   echo ""
   echo -e "${BLUE}Running apt update...${NC}"
   if sudo apt update; then
+    save_last_good "$SELECTED_BASE"
     echo ""
     echo -e "${GREEN}=====================================${NC}"
     echo -e "${GREEN}Success!${NC}"
@@ -1331,14 +1381,16 @@ mirror_menu() {
     echo "  2) International mirrors only"
     echo "  3) Iran + International"
     echo "  4) Manage backups"
+    echo -e "  5) Quick: re-apply last known-good mirror ${YELLOW}(fast, no scan)${NC}"
     echo "  0) Back"
     echo ""
-    read -rp "Enter choice [0-4]: " choice
+    read -rp "Enter choice [0-5]: " choice
     echo ""
 
     case "$choice" in
       1|2|3) mirror_pick_source "$choice"; pause ;;
       4)     mirror_manage_backups; pause ;;
+      5)     use_last_good_mirror; pause ;;
       0)     return ;;
       *)     echo "Invalid choice."; pause ;;
     esac
