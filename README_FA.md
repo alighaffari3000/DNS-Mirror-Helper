@@ -1,6 +1,6 @@
 # dns-mirror-helper
 
-ابزاری مبتنی بر Bash برای سیستم‌های Ubuntu که مدیریت DNS و انتخاب مخزن‌های APT را از طریق یک منوی تعاملی ساده فراهم می‌کند.
+ابزاری مبتنی بر Bash برای سیستم‌های Ubuntu که مدیریت DNS و انتخاب مخزن‌های APT را از طریق یک منوی تعاملی ساده فراهم می‌کند — با تاب‌آوری بیشتر در زمان قطعی اینترنت.
 
 ---
 
@@ -18,6 +18,9 @@
 ### مدیریت Mirror
 
 * تست سرعت و تأخیر (Latency) مخازن Ubuntu داخل ایران و خارج از ایران
+* **پیش‌بررسی سریع (offline)** — میرورهای در دسترس‌نبودن در چند ثانیه حذف می‌شوند (یک probe با درخواست `HEAD` و در صورت رد شدن `HEAD`، fallback به `GET` محدود) پیش از اجرای تست‌های کندتر سرعت
+* **تشخیص خودکار قطعی بین‌الملل** — وقتی خطوط بین‌الملل قطع باشند، در حالت *Iran + International* به‌صورت خودکار فقط میرورهای داخلی تست می‌شوند و در حالت *International only* پیشنهاد سوییچ به میرورهای ایران داده می‌شود
+* **آخرین میرور سالم** — میروری که آخرین بار `apt update` را با موفقیت گذراند به‌خاطر سپرده می‌شود و می‌توان بدون اسکن کامل، فوری دوباره اعمالش کرد
 * نمایش نتایج رتبه‌بندی‌شده و امکان انتخاب دستی در مدت ۱۰ ثانیه
 * انتخاب خودکار بهترین Mirror در صورت عدم انتخاب کاربر
 * پشتیبانی از هر دو فرمت:
@@ -26,6 +29,11 @@
   * `ubuntu.sources` (DEB822)
 * تهیه نسخه پشتیبان قبل از هرگونه تغییر
 * مدیریت نسخه‌های پشتیبان و امکان بازگردانی آن‌ها
+
+### تاب‌آوری در زمان قطعی
+
+* **بسته آفلاین dnscrypt** — باینری `dnscrypt-proxy` (معماری x86_64) و فهرست resolverهای DNSCrypt همراه مخزن ارائه می‌شوند، تا حالت FREE حتی زمانی که GitHub و `download.dnscrypt.info` در دسترس نیستند هم نصب و اجرا شود
+* **`prepare-offline.sh`** — این اسکریپت را زمانی که هنوز اینترنت دارید اجرا کنید تا باینری سایر معماری‌ها (arm64/arm) و نسخه به‌روز فهرست resolver را پیش از قطعی دریافت کنید
 
 ---
 
@@ -39,7 +47,7 @@
   * dig (بسته dnsutils)
   * systemd-resolved
 * دسترسی Root یا sudo
-* dnscrypt-proxy (در صورت نیاز به‌صورت خودکار نصب می‌شود)
+* dnscrypt-proxy (در صورت نیاز به‌صورت خودکار نصب می‌شود — از طریق apt، باینری آفلاین بندل‌شده، یا دانلود از GitHub)
 
 ---
 
@@ -51,13 +59,29 @@
 bash <(curl -fsSL https://raw.githubusercontent.com/alighaffari3000/DNS-Mirror-Helper/main/dns-mirror-helper.sh)
 ```
 
-### دانلود و اجرای دستی
+> ⚠️ این روش فقط خود اسکریپت را دریافت می‌کند و **بسته آفلاین dnscrypt را شامل نمی‌شود**. برای تاب‌آوری در زمان قطعی، کل مخزن را clone کنید (پایین را ببینید).
+
+### clone کامل (پیشنهادی — شامل بسته آفلاین)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/alighaffari3000/DNS-Mirror-Helper/main/dns-mirror-helper.sh -o dns-mirror-helper.sh
-chmod +x dns-mirror-helper.sh
+git clone https://github.com/alighaffari3000/DNS-Mirror-Helper.git
+cd DNS-Mirror-Helper
 sudo ./dns-mirror-helper.sh
 ```
+
+---
+
+## آماده‌سازی برای قطعی اینترنت
+
+در زمان قطعی، معمولاً GitHub و `download.dnscrypt.info` در دسترس نیستند در حالی که میرورهای داخلی (ایران) پابرجا می‌مانند. برای آماده بودن:
+
+1. **همین حالا (با اینترنت) کل مخزن را clone کنید** — باینری x86_64 و فهرست resolver در مخزن commit شده‌اند، پس حالت FREE بدون نیاز به کار اضافه به‌صورت آفلاین کار می‌کند.
+2. **برای دستگاه‌های غیر x86_64 (یا به‌روزرسانی به آخرین نسخه) اجرا کنید:**
+   ```bash
+   ./prepare-offline.sh
+   ```
+   این دستور باینری‌های `arm64`/`arm` و نسخه تازه فهرست resolver را در پوشه `offline/` دانلود می‌کند.
+3. **یک بار با اینترنت یک میرور را اعمال کنید** — آن میرور به‌عنوان *آخرین میرور سالم* ذخیره می‌شود، تا در زمان قطعی بتوانید از طریق **Mirror Manager → 5** در چند ثانیه دوباره اعمالش کنید.
 
 ---
 
@@ -84,7 +108,7 @@ sudo ./dns-mirror-helper.sh
 ## بخش DNS Manager
 
 ```text
-  1) Switch to FREE mode (DoH)
+  1) Switch to International mode (DoH)
   2) Switch to MELLI mode (Auto DNS select)
   3) Auto-select best mode
   4) Manual DNS entry
@@ -111,8 +135,12 @@ DNS addresses: 1.1.1.1, 8.8.8.8, 9.9.9.9
   2) International mirrors only
   3) Iran + International
   4) Manage backups
+  5) Quick: re-apply last known-good mirror (fast, no scan)
   0) Back
 ```
+
+* انتخاب گزینه **۲** یا **۳** ابتدا یک بررسی سریع اتصال بین‌الملل انجام می‌دهد. اگر خطوط بین‌الملل قطع باشند، گزینه **۳** بی‌صدا فقط میرورهای ایران را تست می‌کند و گزینه **۲** پیشنهاد سوییچ به میرورهای ایران می‌دهد.
+* انتخاب گزینه **۵** آخرین میرور موفق را — پس از یک بررسی سریع در دسترس بودن — بدون اسکن کل لیست دوباره اعمال می‌کند. این گزینه پس از اولین اعمال موفق یک میرور فعال می‌شود.
 
 پس از تست مخازن، نتایج به‌ترتیب بهترین عملکرد نمایش داده می‌شوند:
 
@@ -156,7 +184,7 @@ IR_MIRRORS
 GLOBAL_MIRRORS
 ```
 
-خطوطی که با `#` شروع شوند به‌عنوان توضیح در نظر گرفته شده و نادیده گرفته می‌شوند.
+خطوطی که با `#` شروع شوند به‌عنوان توضیح در نظر گرفته شده و نادیده گرفته می‌شوند — میرورهای شناخته‌شدهٔ آفلاین زیر یادداشت «offline mirrors» برای مرجع نگه داشته می‌شوند.
 
 ### تنظیمات dnscrypt-proxy
 
@@ -166,9 +194,21 @@ GLOBAL_MIRRORS
 /etc/dnscrypt-proxy/dnscrypt-proxy.toml
 ```
 
-به‌صورت پیش‌فرض از Resolverهای Cloudflare، Google و Quad9 استفاده می‌شود.
+به‌صورت پیش‌فرض از Resolverهای Cloudflare، Google و Quad9 استفاده می‌شود (فهرست resolver: نسخه v3 از DNSCrypt). در هر بار فعال‌سازی حالت FREE، اگر کش زنده‌ای وجود نداشته باشد، کش resolver از فایل بندل‌شده `offline/public-resolvers.md` مقداردهی اولیه می‌شود تا DoH بدون اینترنت هم بالا بیاید.
 
 برای تغییر این رفتار، تابع `write_default_config()` را در اسکریپت ویرایش کنید.
+
+### بسته آفلاین
+
+پوشه `offline/` شامل فایل‌هایی است که زمان در دسترس‌نبودن GitHub / `download.dnscrypt.info` استفاده می‌شوند:
+
+| فایل | کاربرد |
+|------|--------|
+| `offline/dnscrypt-proxy-linux_x86_64.tar.gz` (+ `.minisig`) | باینری x86_64، برای clone خوداتکا commit شده |
+| `offline/public-resolvers.md` (+ `.minisig`) | فهرست resolver نسخه v3، برای مقداردهی کش |
+| `offline/VERSION` | تگ نسخه dnscrypt-proxy بندل‌شده |
+
+باینری سایر معماری‌ها توسط `prepare-offline.sh` به‌صورت محلی دریافت می‌شوند و عمداً در مخزن commit نمی‌شوند.
 
 ---
 
@@ -189,13 +229,15 @@ Mirror Manager → Manage backups
 
 ---
 
-## فایل‌های تغییر داده شده
+## فایل‌ها و مسیرهای استفاده‌شده
 
 | مسیر                                                  | توضیح                             |
 | ----------------------------------------------------- | --------------------------------- |
 | `/etc/systemd/resolved.conf.d/dns-mirror-helper.conf` | تنظیمات DNS برای systemd-resolved |
 | `/etc/resolv.conf`                                    | لینک به فایل مناسب resolved       |
 | `/etc/dnscrypt-proxy/dnscrypt-proxy.toml`             | تنظیمات dnscrypt-proxy            |
+| `/var/cache/dnscrypt-proxy/public-resolvers.md`       | کش resolver (از بسته آفلاین مقداردهی می‌شود) |
+| `/var/lib/dns-mirror-helper/last-good`                | آدرس آخرین میرور سالم             |
 | `/etc/apt/sources.list`                               | تنظیمات Mirror در سیستم‌های قدیمی |
 | `/etc/apt/sources.list.d/ubuntu.sources`              | تنظیمات Mirror در سیستم‌های جدید  |
 | `/etc/apt/sources.list.bak.*`                         | نسخه‌های پشتیبان خودکار           |
